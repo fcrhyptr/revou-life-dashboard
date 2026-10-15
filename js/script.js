@@ -209,6 +209,321 @@ updateTombolTimer();
 
 
 // ============================================================
-//  BAGIAN 3 – TO-DO LIST, QUICK LINKS, DARK MODE
+//  BAGIAN 3 — TO-DO LIST
+//
+//  Struktur data satu tugas (disimpan sebagai objek):
+//  {
+//    id        : number   → timestamp unik saat tugas dibuat
+//    teks      : string   → isi teks tugas
+//    selesai   : boolean  → true = sudah dicentang
+//    dibuatPada: number   → timestamp (sama dengan id, untuk sort "urutan asli")
+//  }
+//
+//  Semua tugas disimpan dalam array `daftarTugas`.
+//  Array ini di-sync ke Local Storage setiap ada perubahan.
+//
+//  Challenge #2 — Cegah duplikat:
+//  Sebelum menambah tugas baru, bandingkan teks (setelah
+//  .trim().toLowerCase()) dengan semua tugas yang ada.
+//  Jika cocok, tampilkan pesan error dan batalkan penambahan.
+//
+//  Challenge #3 — Sort:
+//  Saat render, buat SALINAN array (spread [...]) lalu urutkan
+//  salinan itu. Array asli `daftarTugas` TIDAK diubah urutan
+//  simpannya — hanya tampilan yang berubah. Ini mencegah
+//  data rusak saat sort berulang kali.
+// ============================================================
+
+const STORAGE_KEY_TODO = 'lifedashboard_todos';
+
+// Muat tugas dari Local Storage, atau mulai dengan array kosong
+let daftarTugas = muatTugasDariStorage();
+
+// Referensi elemen HTML
+const elTodoInput  = document.getElementById('todo-input');
+const elBtnAddTodo = document.getElementById('btn-add-todo');
+const elTodoError  = document.getElementById('todo-error');
+const elTodoList   = document.getElementById('todo-list');
+const elSortSelect = document.getElementById('sort-select');
+
+// ── Fungsi Local Storage ──────────────────────────────────
+
+/**
+ * Simpan array daftarTugas ke Local Storage.
+ * JSON.stringify mengubah array/objek JS → teks (string).
+ * Teks inilah yang bisa disimpan di Local Storage.
+ */
+function simpanTugasKeStorage() {
+  localStorage.setItem(STORAGE_KEY_TODO, JSON.stringify(daftarTugas));
+}
+
+/**
+ * Muat tugas dari Local Storage saat halaman dibuka.
+ * JSON.parse mengubah teks kembali → array/objek JS.
+ * Jika belum ada data, kembalikan array kosong [].
+ */
+function muatTugasDariStorage() {
+  const data = localStorage.getItem(STORAGE_KEY_TODO);
+  return data ? JSON.parse(data) : [];
+}
+
+// ── Fungsi Render ─────────────────────────────────────────
+
+/**
+ * Tampilkan seluruh daftar tugas ke layar.
+ * Setiap kali ada perubahan (tambah/hapus/edit/toggle),
+ * fungsi ini dipanggil untuk menggambar ulang seluruh list.
+ */
+function renderTodoList() {
+  elTodoList.innerHTML = ''; // Kosongkan list dulu
+
+  // Ambil nilai sort yang dipilih pengguna
+  const sortMode = elSortSelect.value;
+
+  // Buat SALINAN array supaya data asli tidak berubah urutannya
+  // Tanda [...] artinya "salin semua isi array ke array baru"
+  let tampilan = [...daftarTugas];
+
+  // Terapkan pengurutan pada salinan
+  switch (sortMode) {
+    case 'name-asc':
+      // A → Z (localeCompare untuk teks Bahasa Indonesia)
+      tampilan.sort((a, b) => a.teks.localeCompare(b.teks, 'id'));
+      break;
+    case 'name-desc':
+      // Z → A
+      tampilan.sort((a, b) => b.teks.localeCompare(a.teks, 'id'));
+      break;
+    case 'completed':
+      // Tugas selesai di atas, belum selesai di bawah
+      tampilan.sort((a, b) => b.selesai - a.selesai);
+      break;
+    case 'active':
+      // Belum selesai di atas, selesai di bawah
+      tampilan.sort((a, b) => a.selesai - b.selesai);
+      break;
+    default:
+      // 'default' = urutan asli berdasarkan waktu dibuat
+      tampilan.sort((a, b) => a.dibuatPada - b.dibuatPada);
+  }
+
+  // Tampilkan pesan jika tidak ada tugas
+  if (tampilan.length === 0) {
+    elTodoList.innerHTML = '<li class="empty-state">Belum ada tugas. Tambahkan satu! 📝</li>';
+    return;
+  }
+
+  // Buat elemen HTML untuk setiap tugas
+  tampilan.forEach(function (tugas) {
+    const li = document.createElement('li');
+    li.className = `todo-item${tugas.selesai ? ' completed' : ''}`;
+    li.dataset.id = tugas.id; // Simpan id di atribut data-id untuk referensi
+
+    li.innerHTML = `
+      <input
+        type="checkbox"
+        class="todo-checkbox"
+        aria-label="Tandai selesai"
+        ${tugas.selesai ? 'checked' : ''}
+      />
+      <span class="todo-text">${escapeHtml(tugas.teks)}</span>
+      <div class="todo-actions">
+        <button class="btn-edit" title="Edit tugas">✏️</button>
+        <button class="btn-delete" title="Hapus tugas">🗑️</button>
+      </div>
+    `;
+
+    // Event: centang/uncentang tugas
+    li.querySelector('.todo-checkbox').addEventListener('change', function () {
+      toggleTugas(tugas.id);
+    });
+
+    // Event: tombol edit
+    li.querySelector('.btn-edit').addEventListener('click', function () {
+      mulaiEditTugas(li, tugas.id);
+    });
+
+    // Event: tombol hapus
+    li.querySelector('.btn-delete').addEventListener('click', function () {
+      hapusTugas(tugas.id);
+    });
+
+    elTodoList.appendChild(li);
+  });
+}
+
+// ── Fungsi CRUD Tugas ─────────────────────────────────────
+
+/**
+ * Tambah tugas baru ke daftarTugas.
+ * Challenge #2: Cek duplikat sebelum menambahkan.
+ */
+function tambahTugas() {
+  const teksAsli = elTodoInput.value.trim(); // Hapus spasi di awal/akhir
+
+  // Validasi: tidak boleh kosong
+  if (teksAsli === '') {
+    tampilkanErrorTodo('Tugas tidak boleh kosong.');
+    return;
+  }
+
+  // Challenge #2 — Cek duplikat (case-insensitive)
+  // Normalisasi: ubah semua ke huruf kecil sebelum membandingkan
+  const teksNormal = teksAsli.toLowerCase();
+  const sudahAda = daftarTugas.some(function (t) {
+    return t.teks.toLowerCase() === teksNormal;
+  });
+
+  if (sudahAda) {
+    tampilkanErrorTodo(`"${teksAsli}" sudah ada di daftar tugasmu! 😊`);
+    return;
+  }
+
+  // Buat objek tugas baru
+  const tugasBaru = {
+    id        : Date.now(),   // Timestamp unik sebagai ID
+    teks      : teksAsli,
+    selesai   : false,
+    dibuatPada: Date.now()
+  };
+
+  daftarTugas.push(tugasBaru);  // Tambahkan ke array
+  simpanTugasKeStorage();        // Simpan ke Local Storage
+  renderTodoList();              // Gambar ulang list
+
+  elTodoInput.value = '';        // Kosongkan input
+  sembunyikanErrorTodo();        // Hapus pesan error lama
+}
+
+/**
+ * Toggle status selesai/belum selesai berdasarkan id.
+ */
+function toggleTugas(id) {
+  const tugas = daftarTugas.find(t => t.id === id);
+  if (!tugas) return;
+  tugas.selesai = !tugas.selesai; // Balik nilai boolean
+  simpanTugasKeStorage();
+  renderTodoList();
+}
+
+/**
+ * Hapus tugas dari array berdasarkan id.
+ * filter() membuat array baru yang TIDAK mengandung tugas dengan id itu.
+ */
+function hapusTugas(id) {
+  daftarTugas = daftarTugas.filter(t => t.id !== id);
+  simpanTugasKeStorage();
+  renderTodoList();
+}
+
+/**
+ * Ubah tampilan item tugas menjadi mode edit (inline).
+ * Teks berubah jadi input, tombol edit berubah jadi tombol simpan.
+ */
+function mulaiEditTugas(liElemen, id) {
+  const elTeks    = liElemen.querySelector('.todo-text');
+  const elEdit    = liElemen.querySelector('.btn-edit');
+  const teksLama  = elTeks.textContent;
+
+  // Ganti <span> dengan <input> yang sudah terisi teks lama
+  const inputEdit = document.createElement('input');
+  inputEdit.type      = 'text';
+  inputEdit.className = 'todo-edit-input';
+  inputEdit.value     = teksLama;
+  inputEdit.maxLength = 100;
+  elTeks.replaceWith(inputEdit);
+  inputEdit.focus();
+  inputEdit.select(); // Seleksi semua teks supaya mudah diedit
+
+  // Ganti tombol ✏️ jadi tombol ✅ (simpan)
+  elEdit.textContent = '✅';
+  elEdit.className   = 'btn-save';
+
+  // Fungsi simpan perubahan
+  function simpanEdit() {
+    const teksBaru = inputEdit.value.trim();
+
+    if (teksBaru === '') {
+      inputEdit.style.borderColor = 'var(--accent-danger)';
+      return;
+    }
+
+    // Cek duplikat saat edit (kecuali jika teksnya sama dengan sebelumnya)
+    if (teksBaru.toLowerCase() !== teksLama.toLowerCase()) {
+      const sudahAda = daftarTugas.some(
+        t => t.id !== id && t.teks.toLowerCase() === teksBaru.toLowerCase()
+      );
+      if (sudahAda) {
+        inputEdit.style.borderColor = 'var(--accent-danger)';
+        tampilkanErrorTodo(`"${teksBaru}" sudah ada di daftar tugasmu! 😊`);
+        return;
+      }
+    }
+
+    // Update teks di array
+    const tugas = daftarTugas.find(t => t.id === id);
+    if (tugas) tugas.teks = teksBaru;
+    simpanTugasKeStorage();
+    sembunyikanErrorTodo();
+    renderTodoList();
+  }
+
+  // Simpan saat tombol ✅ diklik
+  elEdit.addEventListener('click', simpanEdit);
+
+  // Simpan juga saat tekan Enter, batal saat tekan Escape
+  inputEdit.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter')  simpanEdit();
+    if (e.key === 'Escape') { sembunyikanErrorTodo(); renderTodoList(); }
+  });
+}
+
+// ── Fungsi Helper Error ───────────────────────────────────
+
+function tampilkanErrorTodo(pesan) {
+  elTodoError.textContent = pesan;
+  elTodoError.classList.remove('hidden');
+}
+
+function sembunyikanErrorTodo() {
+  elTodoError.textContent = '';
+  elTodoError.classList.add('hidden');
+}
+
+/**
+ * Mencegah XSS: karakter HTML khusus di-escape sebelum
+ * ditampilkan ke innerHTML. Ini kebiasaan aman saat
+ * menampilkan teks dari input pengguna.
+ */
+function escapeHtml(teks) {
+  return teks
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// ── Event Listener ────────────────────────────────────────
+
+// Tombol Tambah
+elBtnAddTodo.addEventListener('click', tambahTugas);
+
+// Tekan Enter di input juga menambah tugas
+elTodoInput.addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') tambahTugas();
+});
+
+// Hapus pesan error saat pengguna mulai mengetik lagi
+elTodoInput.addEventListener('input', sembunyikanErrorTodo);
+
+// Saat dropdown sort berubah, render ulang list
+elSortSelect.addEventListener('change', renderTodoList);
+
+// Render pertama kali saat halaman dibuka
+renderTodoList();
+
+
+// ============================================================
+//  BAGIAN 4 – QUICK LINKS, DARK MODE
 //  → Akan ditambahkan di tahap berikutnya
 // ============================================================

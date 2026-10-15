@@ -129,11 +129,13 @@ function renderTimer() {
   elTimer.textContent = formatWaktu(sisaDetik);
 
   if (sisaDetik <= 60 && sisaDetik > 0) {
-    // Warna merah saat hampir habis
+    // Warna merah + animasi berkedip saat hampir habis
     elTimer.style.color = 'var(--accent-danger)';
+    elTimer.classList.add('urgent');
   } else {
     // Kembalikan ke warna normal
     elTimer.style.color = 'var(--timer-color)';
+    elTimer.classList.remove('urgent');
   }
 }
 

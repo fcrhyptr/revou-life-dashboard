@@ -524,6 +524,182 @@ renderTodoList();
 
 
 // ============================================================
-//  BAGIAN 4 – QUICK LINKS, DARK MODE
+//  BAGIAN 4 — QUICK LINKS
+//
+//  Struktur data satu tautan:
+//  {
+//    id   : number  → timestamp unik
+//    nama : string  → label yang ditampilkan
+//    url  : string  → URL lengkap (harus https:// atau http://)
+//  }
+//
+//  Semua tautan disimpan dalam array `daftarLinks`.
+//  Setiap perubahan langsung di-sync ke Local Storage.
+// ============================================================
+
+const STORAGE_KEY_LINKS = 'lifedashboard_links';
+
+let daftarLinks = muatLinksDariStorage();
+
+// Referensi elemen HTML
+const elLinkNameInput = document.getElementById('link-name-input');
+const elLinkUrlInput  = document.getElementById('link-url-input');
+const elBtnAddLink    = document.getElementById('btn-add-link');
+const elLinkError     = document.getElementById('link-error');
+const elLinksList     = document.getElementById('links-list');
+
+// ── Fungsi Local Storage ──────────────────────────────────
+
+function simpanLinksKeStorage() {
+  localStorage.setItem(STORAGE_KEY_LINKS, JSON.stringify(daftarLinks));
+}
+
+function muatLinksDariStorage() {
+  const data = localStorage.getItem(STORAGE_KEY_LINKS);
+  return data ? JSON.parse(data) : [];
+}
+
+// ── Validasi URL ──────────────────────────────────────────
+
+/**
+ * Cek apakah URL valid.
+ * Menggunakan objek bawaan browser `URL` untuk validasi —
+ * lebih andal daripada regex buatan sendiri.
+ */
+function urlValid(str) {
+  try {
+    const u = new URL(str);
+    // Hanya izinkan http dan https (bukan ftp, file, dll.)
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+// ── Fungsi Render ─────────────────────────────────────────
+
+function renderLinksList() {
+  elLinksList.innerHTML = '';
+
+  if (daftarLinks.length === 0) {
+    elLinksList.innerHTML = '<li class="empty-state">Belum ada tautan. Tambahkan satu! 🔗</li>';
+    return;
+  }
+
+  daftarLinks.forEach(function (link) {
+    const li = document.createElement('li');
+    li.className = 'link-item';
+    li.dataset.id = link.id;
+
+    // Tampilkan domain sebagai preview URL yang ringkas
+    // Contoh: "https://github.com/user/repo" → "github.com"
+    let domainPreview = '';
+    try {
+      domainPreview = new URL(link.url).hostname;
+    } catch {
+      domainPreview = link.url;
+    }
+
+    li.innerHTML = `
+      <a
+        href="${escapeHtml(link.url)}"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="link-anchor"
+        title="${escapeHtml(link.url)}"
+      >${escapeHtml(link.nama)}</a>
+      <span class="link-url-preview">${escapeHtml(domainPreview)}</span>
+      <button class="btn-delete" title="Hapus tautan">🗑️</button>
+    `;
+
+    // Event: tombol hapus
+    li.querySelector('.btn-delete').addEventListener('click', function () {
+      hapusLink(link.id);
+    });
+
+    elLinksList.appendChild(li);
+  });
+}
+
+// ── Fungsi CRUD Links ─────────────────────────────────────
+
+function tambahLink() {
+  const nama = elLinkNameInput.value.trim();
+  const url  = elLinkUrlInput.value.trim();
+
+  // Validasi nama
+  if (nama === '') {
+    tampilkanErrorLink('Nama tautan tidak boleh kosong.');
+    return;
+  }
+
+  // Validasi URL
+  if (url === '') {
+    tampilkanErrorLink('URL tidak boleh kosong.');
+    return;
+  }
+
+  if (!urlValid(url)) {
+    tampilkanErrorLink('URL tidak valid. Gunakan format: https://contoh.com');
+    return;
+  }
+
+  const linkBaru = {
+    id  : Date.now(),
+    nama: nama,
+    url : url
+  };
+
+  daftarLinks.push(linkBaru);
+  simpanLinksKeStorage();
+  renderLinksList();
+
+  // Kosongkan input setelah berhasil
+  elLinkNameInput.value = '';
+  elLinkUrlInput.value  = '';
+  sembunyikanErrorLink();
+  elLinkNameInput.focus();
+}
+
+function hapusLink(id) {
+  daftarLinks = daftarLinks.filter(l => l.id !== id);
+  simpanLinksKeStorage();
+  renderLinksList();
+}
+
+// ── Fungsi Helper Error ───────────────────────────────────
+
+function tampilkanErrorLink(pesan) {
+  elLinkError.textContent = pesan;
+  elLinkError.classList.remove('hidden');
+}
+
+function sembunyikanErrorLink() {
+  elLinkError.textContent = '';
+  elLinkError.classList.add('hidden');
+}
+
+// ── Event Listener ────────────────────────────────────────
+
+elBtnAddLink.addEventListener('click', tambahLink);
+
+// Tekan Enter di salah satu input juga menambah tautan
+elLinkNameInput.addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') tambahLink();
+});
+elLinkUrlInput.addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') tambahLink();
+});
+
+// Hapus pesan error saat pengguna mulai mengetik lagi
+elLinkNameInput.addEventListener('input', sembunyikanErrorLink);
+elLinkUrlInput.addEventListener('input', sembunyikanErrorLink);
+
+// Render pertama kali saat halaman dibuka
+renderLinksList();
+
+
+// ============================================================
+//  BAGIAN 5 – DARK MODE
 //  → Akan ditambahkan di tahap berikutnya
 // ============================================================

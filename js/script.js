@@ -700,6 +700,84 @@ renderLinksList();
 
 
 // ============================================================
-//  BAGIAN 5 – DARK MODE
-//  → Akan ditambahkan di tahap berikutnya
+//  BAGIAN 5 — LIGHT / DARK MODE  (Challenge #1)
+//
+//  Cara kerja:
+//  - Tema dikontrol oleh atribut data-theme di tag <html>.
+//    CSS sudah siap dengan dua set variabel warna:
+//    [data-theme="light"] dan [data-theme="dark"]
+//  - Saat tombol diklik, kita tinggal ganti nilai atribut itu.
+//  - Preferensi disimpan di Local Storage dengan key 'theme'.
+//
+//  Prioritas tema saat halaman dibuka:
+//  1. Jika ada di Local Storage → pakai itu
+//  2. Jika tidak ada → cek preferensi OS (prefers-color-scheme)
+//  3. Default fallback → light
+// ============================================================
+
+const STORAGE_KEY_THEME = 'lifedashboard_theme';
+
+const elThemeToggle = document.getElementById('theme-toggle');
+const elThemeIcon   = document.getElementById('theme-icon');
+const elHtml        = document.documentElement; // Tag <html>
+
+/**
+ * Terapkan tema ke halaman dan perbarui ikon tombol.
+ * @param {string} tema - 'light' atau 'dark'
+ */
+function terapkanTema(tema) {
+  elHtml.setAttribute('data-theme', tema);
+
+  // Ganti ikon: mode gelap → tampilkan ikon matahari (untuk switch ke terang)
+  //             mode terang → tampilkan ikon bulan (untuk switch ke gelap)
+  elThemeIcon.textContent = tema === 'dark' ? '☀️' : '🌙';
+  elThemeToggle.setAttribute('aria-label',
+    tema === 'dark' ? 'Ganti ke mode terang' : 'Ganti ke mode gelap'
+  );
+}
+
+/**
+ * Simpan preferensi tema ke Local Storage.
+ */
+function simpanTema(tema) {
+  localStorage.setItem(STORAGE_KEY_THEME, tema);
+}
+
+/**
+ * Tentukan tema awal saat halaman pertama dibuka.
+ * Urutan prioritas: Local Storage → preferensi OS → default light
+ */
+function inisialisasiTema() {
+  const tersimpan = localStorage.getItem(STORAGE_KEY_THEME);
+
+  if (tersimpan === 'dark' || tersimpan === 'light') {
+    // Pengguna pernah memilih tema → gunakan pilihan itu
+    terapkanTema(tersimpan);
+  } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    // Belum pernah pilih, tapi OS-nya pakai dark mode → ikuti OS
+    terapkanTema('dark');
+  } else {
+    // Default: light
+    terapkanTema('light');
+  }
+}
+
+// Event: tombol toggle diklik
+elThemeToggle.addEventListener('click', function () {
+  // Baca tema yang sedang aktif
+  const temaSaatIni = elHtml.getAttribute('data-theme');
+  const temaBaru    = temaSaatIni === 'dark' ? 'light' : 'dark';
+
+  terapkanTema(temaBaru);
+  simpanTema(temaBaru);
+});
+
+// Jalankan saat halaman dibuka
+inisialisasiTema();
+
+
+// ============================================================
+//  SEMUA FITUR SELESAI
+//  Tahap 8 → Poles desain & responsif (hanya CSS)
+//  Tahap 9 → Checklist pengujian manual
 // ============================================================
